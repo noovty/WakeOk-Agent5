@@ -1,0 +1,57 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Extract project ZIP
+        run: |
+          mkdir project
+          unzip -q "$(find . -maxdepth 1 -type f -name '*.zip' | head -1)" -d project
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build APK
+        run: |
+          PROJECT_DIR=$(dirname "$(find project -name settings.gradle -print -quit)")
+          cd "$PROJECT_DIR"
+          gradle --no-daemon clean :app:assembleDebug
+
+      - name: Verify APK
+        run: |
+          APK=$(find project -name app-debug.apk -print -quit)
+          test -n "$APK"
+          ls -lh "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WakeOk-Agent5-APK
+          path: project/**/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
